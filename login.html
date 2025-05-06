@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login - HackTown</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    input, button { margin-top: 10px; padding: 8px; width: 100%; }
+    button { background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button:hover { background-color: #45a049; }
+    .container { max-width: 400px; margin: auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Login to HackTown</h2>
+    <input type="email" id="email" placeholder="Email" required />
+    <input type="password" id="password" placeholder="Password" required />
+    <button id="loginBtn">Log In</button>
+    <button id="signupBtn">Sign Up</button>
+    <p id="status"></p>
+  </div>
+  
+    
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+  
+    const supabase = createClient(
+      'https://yxxglntgmzzmfehzkxwd.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4eGdsbnRnbXp6bWZlaHpreHdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY1MDk3NjMsImV4cCI6MjA2MjA4NTc2M30.pfkqQ6kT36hsOm6Y-urxkAanFKcXeH8xrbXxiHbeL8w'
+    );
+  
+    const email = document.getElementById("email");
+    const password = document.getElementById("password");
+    const status = document.getElementById("status");
+  
+    async function checkProfileAndRedirect(user) {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+  
+      if (error && error.code !== 'PGRST116') {
+        console.error("Error checking profile:", error.message);
+        status.textContent = "Login failed: Could not check profile.";
+        return;
+      }
+  
+      if (profile) {
+        // profile exists → go to main app
+        window.location.href = "index.html";
+      } else {
+        // no profile yet → go to profile setup
+        window.location.href = "profile-setup.html";
+      }
+    }
+  
+    document.getElementById("loginBtn").addEventListener("click", async () => {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.value,
+        password: password.value
+      });
+  
+      if (error) {
+        status.textContent = "Login failed: " + error.message;
+      } else {
+        status.textContent = "Login successful!";
+        checkProfileAndRedirect(data.user);
+      }
+    });
+  
+    document.getElementById("signupBtn").addEventListener("click", async () => {
+      const { error } = await supabase.auth.signUp({
+        email: email.value,
+        password: password.value
+      });
+  
+      if (error) {
+        status.textContent = "Signup failed: " + error.message;
+      } else {
+        status.textContent = "Signup successful! Check your email to confirm.";
+      }
+    });
+  </script>  
+</body>
+</html>
+
+
+
+
+
+
+
+
+

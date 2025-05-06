@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HackTown - Share Your Finds</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    .container { width: 80%; margin: 0 auto; padding: 20px; }
+    .feed { display: flex; flex-wrap: wrap; gap: 20px; }
+    .post { width: 300px; border: 1px solid #ddd; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); }
+    img { width: 100%; border-radius: 8px; }
+    button { padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button:hover { background-color: #45a049; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>Welcome to HackTown!</h1>
+
+    <div style="text-align: right;">
+      <button id="profileBtn">My Profile</button>
+    </div>
+
+    <p>Share your latest finds in SF – a cafe, a cool event, or extra food you want to give away!</p>
+
+    <h3>Upload Your Find:</h3>
+    <form id="postForm">
+      <input type="file" id="imageUpload" accept="image/*" required />
+      <textarea id="caption" placeholder="Add a description..." rows="4" required></textarea>
+      <button type="submit">Post</button>
+    </form>
+
+    <h3>Recent Posts:</h3>
+    <div id="feed" class="feed"></div>
+
+    <div id="profileSection" style="display: none; margin-top: 40px;">
+      <h3>My Posts</h3>
+      <div id="myPosts" class="feed"></div>
+    </div>    
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+    const supabaseUrl = 'https://yxxglntgmzzmfehzkxwd.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4eGdsbnRnbXp6bWZlaHpreHdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY1MDk3NjMsImV4cCI6MjA2MjA4NTc2M30.pfkqQ6kT36hsOm6Y-urxkAanFKcXeH8xrbXxiHbeL8w';
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (!session) {
+      window.location.href = "login.html";
+    }
+
+    const bucketName = 'uploads';
+
+    document.getElementById("postForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const caption = document.getElementById("caption").value;
+      const file = document.getElementById("imageUpload").files[0];
+
+      if (!file) {
+        alert("Please select an image.");
+        return;
+      }
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+
+      // Upload image to Supabase Storage
+      const { data, error: uploadError } = await supabase.storage
+        .from(bucketName)
+        .upload(fileName, file);
+
+      if (uploadError) {
+        console.error("Image upload failed:", uploadError);
+        alert("Failed to upload image.");
+        return;
+      }
+
+      // Get public URL
+      const { data: publicUrlData, error: urlError } = supabase
+        .storage
+        .from(bucketName)
+        .getPublicUrl(fileName);
+
+      if (urlError) {
+        console.error("Public URL fetch failed:", urlError);
+        alert("Failed to retrieve image URL.");
+        return;
+      }
+
+      const imageUrl = publicUrlData.publicUrl;
+
+      // Insert into posts table
+      const userId = session.user.id;
+      const { error: insertError } = await supabase
+        .from('posts')
+        .insert([{ image_url: imageUrl, caption: caption, user_id: userId }]);
+
+      if (insertError) {
+        console.error("Post insert failed:", insertError);
+        alert("Failed to post.");
+        return;
+      }
+
+      // Display post on the page
+      displayPost({ imageUrl, caption, created_at: new Date().toISOString() });
+
+      // Clear form
+      document.getElementById("postForm").reset();
+    });
+
+    // Display a post in the feed
+    function displayPost(post) {
+      const postDiv = document.createElement("div");
+      postDiv.classList.add("post");
+
+      const img = document.createElement("img");
+      img.src = post.imageUrl;
+      postDiv.appendChild(img);
+
+      const p = document.createElement("p");
+      p.textContent = post.caption;
+      postDiv.appendChild(p);
+
+      if (post.created_at) {
+        const timeP = document.createElement("p");
+        const date = new Date(post.created_at);
+        timeP.textContent = `Posted on ${date.toLocaleString()}`;
+        timeP.style.fontSize = "0.8em";
+        timeP.style.color = "#555";
+        postDiv.appendChild(timeP);
+      }
+
+      document.getElementById("feed").prepend(postDiv); // newest post first
+    }
+
+    // Load existing posts on page load
+    async function loadPosts() {
+      const { data: posts, error } = await supabase
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error("Error loading posts:", error);
+        return;
+      }
+
+      posts.forEach(post => {
+        displayPost({
+          imageUrl: post.image_url,
+          caption: post.caption,
+          created_at: post.created_at
+        });
+      });
+    }
+
+    loadPosts();
+
+    async function loadUserPosts(userId) {
+      const { data: posts, error } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error("Error loading user posts:", error);
+        return;
+      }
+
+      const myPostsDiv = document.getElementById("myPosts");
+      myPostsDiv.innerHTML = '';
+      posts.forEach(post => {
+        const postDiv = document.createElement("div");
+        postDiv.classList.add("post");
+
+        const img = document.createElement("img");
+        img.src = post.image_url;
+        postDiv.appendChild(img);
+
+        const p = document.createElement("p");
+        p.textContent = post.caption;
+        postDiv.appendChild(p);
+
+        myPostsDiv.appendChild(postDiv);
+      });
+    }
+
+    document.getElementById("profileBtn").addEventListener("click", async () => {
+      const profileSection = document.getElementById("profileSection");
+      profileSection.style.display = profileSection.style.display === "none" ? "block" : "none";
+
+      const {
+        data: { session: newSession },
+      } = await supabase.auth.getSession();
+
+      if (newSession && newSession.user) {
+        loadUserPosts(newSession.user.id);
+      }
+    });
+
+  </script>
+</body>
+</html>

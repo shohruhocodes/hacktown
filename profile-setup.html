@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Set Up Profile - HackTown</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    input, button { margin-top: 10px; padding: 8px; width: 100%; }
+    button { background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button:hover { background-color: #45a049; }
+    .container { max-width: 400px; margin: auto; }
+    img { margin-top: 10px; max-width: 100px; border-radius: 50%; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Complete Your Profile</h2>
+    <input type="text" id="username" placeholder="Username (required)" required />
+    <input type="text" id="fullname" placeholder="Full Name (optional)" />
+    <input type="file" id="avatar" accept="image/*" />
+    <img id="preview" src="" alt="" style="display:none;" />
+    <button id="saveProfile">Save Profile</button>
+    <p id="status"></p>
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+    const supabase = createClient(
+      'https://yxxglntgmzzmfehzkxwd.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4eGdsbnRnbXp6bWZlaHpreHdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY1MDk3NjMsImV4cCI6MjA2MjA4NTc2M30.pfkqQ6kT36hsOm6Y-urxkAanFKcXeH8xrbXxiHbeL8w'
+    );
+
+    const username = document.getElementById("username");
+    const fullname = document.getElementById("fullname");
+    const avatar = document.getElementById("avatar");
+    const status = document.getElementById("status");
+    const preview = document.getElementById("preview");
+
+    avatar.addEventListener('change', () => {
+      const file = avatar.files[0];
+      if (file) {
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = "block";
+      }
+    });
+
+    document.getElementById("saveProfile").addEventListener("click", async () => {
+      if (!username.value.trim()) {
+        status.textContent = "Username is required.";
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        status.textContent = "User not authenticated.";
+        return;
+      }
+
+      let avatarUrl = null;
+
+      // Upload avatar if selected
+      const file = avatar.files[0];
+      if (file) {
+        const filePath = `avatar/${user.id}-${Date.now()}.${file.name.split('.').pop()}`;
+        const { error: uploadError } = await supabase.storage
+          .from('avatar')
+          .upload(filePath, file);
+
+        if (uploadError) {
+          status.textContent = "Avatar upload failed: " + uploadError.message;
+          return;
+        }
+
+        const { data: publicURL } = supabase.storage
+          .from('avatar')
+          .getPublicUrl(filePath);
+        avatarUrl = publicURL.publicUrl;
+      }
+
+      // Insert profile
+      const { error } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          username: username.value.trim(),
+          full_name: fullname.value.trim(),
+          avatar_url: avatarUrl
+        });
+
+      if (error) {
+        status.textContent = "Error saving profile: " + error.message;
+      } else {
+        status.textContent = "Profile saved successfully!";
+        setTimeout(() => window.location.href = "index.html", 1000);
+      }
+    });
+  </script>
+</body>
+</html>
+
+
